@@ -1,38 +1,38 @@
 import boto3
+import os
 
-def synthesize_speech(input_file, output_file, voice_id="Joanna"):
-    # Read the text from the input file
-    with open(input_file, "r") as f:
-        text = f.read()
+# Get environment variables
+bucket_name = os.environ['S3_BUCKET_NAME']
+region = os.environ['AWS_REGION']
 
-    # Create a Polly client
-    polly = boto3.client("polly")
+# Optional: You can set this dynamically if needed
+output_filename = os.environ.get('OUTPUT_FILENAME', 'output.mp3')
+s3_key = f"polly-audio/{output_filename}"
 
-    # Request speech synthesis
-    response = polly.synthesize_speech(
-        Text=text,
-        OutputFormat="mp3",
-        VoiceId=voice_id
-    )
+# Read text to synthesize
+with open('speech.txt', 'r') as file:
+    text = file.read()
 
-    # Save the audio stream to a file
-    with open(output_file, "wb") as f:
-        f.write(response["AudioStream"].read())
+# Initialize Polly and S3 clients
+polly = boto3.client('polly', region_name=region)
+s3 = boto3.client('s3', region_name=region)
 
-    print(f"✅ Audio saved to {output_file}")
+# Synthesize speech using Amazon Polly
+response = polly.synthesize_speech(
+    Text=text,
+    OutputFormat='mp3',
+    VoiceId='Joanna'  # You can change voice here
+)
 
-def upload_to_s3(file_name, bucket_name, object_name):
-    s3 = boto3.client("s3")
-    try:
-        s3.upload_file(file_name, bucket_name, object_name)
-        print(f"✅ Uploaded {file_name} to s3://{bucket_name}/{object_name}")
-    except Exception as e:
-        print(f"❌ Failed to upload to S3: {e}")
+# Save mp3 temporarily
+with open('/tmp/' + output_filename, 'wb') as file:
+    file.write(response['AudioStream'].read())
 
-if __name__ == "__main__":
-    bucket = "polly-learning-co"  # Replace with your S3 bucket name
-    local_file = "speech.mp3"
-    s3_object = "polly-audio/speech.mp3"  # The prefix + file name on S3
+# Upload to S3
+s3.upload_file(
+    Filename='/tmp/' + output_filename,
+    Bucket=bucket_name,
+    Key=s3_key
+)
 
-    synthesize_speech("speech.txt", local_file)
-    upload_to_s3(local_file, bucket, s3_object)
+print(f"Uploaded {output_filename} to s3://{bucket_name}/{s3_key}")
